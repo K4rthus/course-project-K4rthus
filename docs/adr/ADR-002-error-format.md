@@ -13,11 +13,11 @@ STRIDE анализ выявил угрозы Information Disclosure (I) чер�
 
 ## Decision
 Принимаем стандарт RFC 7807 (Problem Details for HTTP APIs) с учетом требований безопасности. 1ю
-1. **Структура ошибок**: 
+1. **Структура ошибок**:
 ```json
    {
      "type": "/errors/validation",
-     "title": "Validation Error", 
+     "title": "Validation Error",
      "status": 422,
      "detail": "One or more validation errors occurred",
      "correlation_id": "uuid-v4",
@@ -69,7 +69,7 @@ STRIDE анализ выявил угрозы Information Disclosure (I) чер�
 
 ## Links
 - **NFR-04** (Конфиденциальность), **NFR-10** (Аудит)
-- **R3** (Утечка PII), **R8** (Утечка через логи) из RISKS.md  
+- **R3** (Утечка PII), **R8** (Утечка через логи) из RISKS.md
 - **F10** (Логи), **I: Information Disclosure** из STRIDE.md
 - **US-006** (Логирование операций)
 - `tests/test_errors.py` - тесты формата ошибок
