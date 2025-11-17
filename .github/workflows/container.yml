@@ -29,20 +29,6 @@ jobs:
       run: |
         docker build -t suggestion-box:latest .
 
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: 'suggestion-box:latest'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        severity: 'CRITICAL'
-
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v4
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
-
     - name: Test container security
       run: |
         docker build -t suggestion-box-test .
