@@ -1,0 +1,41 @@
+services:
+  suggestion-box:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: suggestion-box-app
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - UPLOAD_DIR=/tmp/uploads
+    volumes:
+      - uploads_data:/tmp/uploads
+    # Security hardening
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  uploads_data:
+
+networks:
+  app-network:
+    driver: bridge
