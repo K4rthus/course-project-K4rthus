@@ -9,7 +9,7 @@ on:
 jobs:
   container-security:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -42,10 +42,10 @@ jobs:
       run: |
         docker build -t suggestion-box-test .
         docker run -d --name test-app -p 8000:8000 suggestion-box-test
-        
+
         echo "Waiting for application to start..."
         sleep 15
-        
+
         user_id=$(docker exec test-app id -u)
         if [ "$user_id" -eq 0 ]; then
           echo "Container is running as root"
@@ -53,7 +53,7 @@ jobs:
         else
           echo "Container running as user ID: $user_id"
         fi
-        
+
         response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || echo "000")
         if [ "$response" -eq 200 ]; then
           echo "Health endpoint responded with 200"
@@ -61,7 +61,7 @@ jobs:
           echo "Health endpoint failed: HTTP $response"
           exit 1
         fi
-        
+
         docker stop test-app
         docker rm test-app
 
