@@ -38,7 +38,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.cache/pre-commit
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles("requirements*.txt", "pyproject.toml") }}
+          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
 
