@@ -37,7 +37,7 @@ jobs:
 
       - name: Generate SBOM with Syft (CycloneDX)
         run: |
-          docker run --rm -v $PWD:/work -w /work anchore/syft:v1 \
+          docker run --rm -v $PWD:/work -w /work anchore/syft:latest \
             packages dir:. -o cyclonedx-json > EVIDENCE/P09/sbom.json
           echo "SBOM generated. Components: $(jq '.components | length' EVIDENCE/P09/sbom.json)"
 
