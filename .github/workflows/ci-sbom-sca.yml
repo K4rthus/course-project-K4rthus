@@ -44,7 +44,7 @@ jobs:
       - name: Run SCA Scan with Grype
         run: |
           set -e
-          docker run --rm -v $PWD:/work -w /work anchore/grype:v1 \
+          docker run --rm -v $PWD:/work -w /work anchore/grype:latest
             sbom:/work/EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json
 
           # Создаем детализированную текстовую сводку
