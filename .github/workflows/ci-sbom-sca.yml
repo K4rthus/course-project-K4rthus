@@ -1,0 +1,79 @@
+name: Security - SBOM & SCA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**/*.py'
+      - 'requirements*.txt'
+      - '.github/workflows/ci-sbom-sca.yml'
+  pull_request:
+    paths:
+      - '**/*.py'
+      - 'requirements*.txt'
+      - '.github/workflows/ci-sbom-sca.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom_sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure evidence directory exists
+        run: mkdir -p EVIDENCE/P09
+
+      - name: Install jq for JSON processing
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate SBOM with Syft (CycloneDX)
+        run: |
+          docker run --rm -v $PWD:/work -w /work anchore/syft:v1 \
+            packages dir:. -o cyclonedx-json > EVIDENCE/P09/sbom.json
+          echo "SBOM generated. Components: $(jq '.components | length' EVIDENCE/P09/sbom.json)"
+
+      - name: Run SCA Scan with Grype
+        run: |
+          set -e
+          docker run --rm -v $PWD:/work -w /work anchore/grype:v1 \
+            sbom:/work/EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json
+
+          # Создаем детализированную текстовую сводку
+          echo "# SCA Scan Summary" > EVIDENCE/P09/sca_summary.md
+          echo "**Generated:** $(date -u)" >> EVIDENCE/P09/sca_summary.md
+          echo "**Commit:** ${{ github.sha }}" >> EVIDENCE/P09/sca_summary.md
+          echo "" >> EVIDENCE/P09/sca_summary.md
+
+          # Подсчет уязвимостей по степени серьезности (Severity)
+          echo "## Vulnerability Count by Severity" >> EVIDENCE/P09/sca_summary.md
+          jq '[.matches[].vulnerability.severity] | group_by(.) | map({severity: .[0], count: length}) | .[] | "- **\(.severity)**: \(.count)"' EVIDENCE/P09/sca_report.json >> EVIDENCE/P09/sca_summary.md 2>/dev/null || echo "- No vulnerabilities detected." >> EVIDENCE/P09/sca_summary.md
+
+          # Список уязвимостей High/Critical для первоочередного внимания
+          echo "" >> EVIDENCE/P09/sca_summary.md
+          echo "## Critical & High Severity Findings" >> EVIDENCE/P09/sca_summary.md
+          jq -r '.matches[] | select(.vulnerability.severity == "Critical" or .vulnerability.severity == "High") | "### \(.vulnerability.id)\n- **Package:** \(.artifact.name)@\(.artifact.version)\n- **Description:** \(.vulnerability.description)\n- **Status:** Requires review\n"' EVIDENCE/P09/sca_report.json >> EVIDENCE/P09/sca_summary.md 2>/dev/null || echo "No Critical or High severity vulnerabilities found." >> EVIDENCE/P09/sca_summary.md
+
+          # Наметки плана действий
+          echo "" >> EVIDENCE/P09/sca_summary.md
+          echo "## Proposed Action Plan" >> EVIDENCE/P09/sca_summary.md
+          echo "1. Review all findings above." >> EVIDENCE/P09/sca_summary.md
+          echo "2. For Critical/High findings, check if a patched version of the dependency is available." >> EVIDENCE/P09/sca_summary.md
+          echo "3. If a finding is a false positive or risk is accepted, add a waiver to \`policy/waivers.yml\`." >> EVIDENCE/P09/sca_summary.md
+          echo "4. Update \`requirements.txt\` with fixed versions and create a follow-up PR." >> EVIDENCE/P09/sca_summary.md
+
+      - name: Upload Evidence Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P09_EVIDENCE
+          path: EVIDENCE/P09/
+          retention-days: 30

@@ -1,0 +1,17 @@
+# policy/waivers.yml - Vulnerability Waiver Policy
+# Этот файл документирует исключения для принятых рисков безопасности.
+# Он является частью процесса управления уязвимостями зависимостей.
+
+waivers:
+  # Пример waiver
+  # - id: "CVE-2023-XXXXX"
+  #   package: "example-package"
+  #   version: "1.0.0"
+  #   severity: "Medium"
+  #   reason: |
+  #     Уязвимость присутствует в транзитивной зависимости, которая
+  #     не используется в критических путях выполнения кода проекта.
+  #     Обновление зависимости приведет к конфликту совместимости с другими библиотеками.
+  #   issue: "https://github.com/K4rthus/course-project-K4rthus/issues/1"
+  #   expires_at: "2025-12-31"      # Дата пересмотра исключения
+  #   approved_by: "zabelkinnikita@mail.ru"
