@@ -42,19 +42,21 @@ jobs:
           echo "Trying to generate SBOM..."
           docker pull anchore/syft:v1.38.0 2>/dev/null || true
 
-          docker run --rm \
-            -e SYFT_OUTPUT="cyclonedx-json" \
-            -v $PWD:/work -w /work \
-            anchore/syft:v1.38.0 \
-            /work \
-            --output /work/EVIDENCE/P09/sbom.json || echo "SBOM generation attempt finished"
+          # ИСПРАВЛЕННАЯ КОМАНДА: правильный синтаксис для Syft v1.38.0
+          docker run --rm -v $PWD:/work -w /work anchore/syft:v1.38.0 \
+            scan /work \
+            -o cyclonedx-json > EVIDENCE/P09/sbom.json || {
+              echo "SBOM generation failed"
+              exit 1  # Завершаем workflow с ошибкой
+            }
 
+          # Проверка результата
           if [ -s "EVIDENCE/P09/sbom.json" ]; then
             echo "SBOM generated successfully"
             echo "Components: $(jq '.components | length' EVIDENCE/P09/sbom.json 2>/dev/null || echo 'unknown')"
           else
-            echo "SBOM file is empty, creating minimal SBOM"
-            echo '{"bomFormat":"CycloneDX","specVersion":"1.6","version":1,"components":[]}' > EVIDENCE/P09/sbom.json
+            echo "SBOM file is empty"
+            exit 1  # Завершаем workflow с ошибкой
           fi
 
       - name: Run SCA Scan with Grype
