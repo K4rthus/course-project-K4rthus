@@ -39,25 +39,21 @@ jobs:
 
       - name: Generate SBOM with Syft (CycloneDX)
         run: |
-          # Пробуем несколько тегов на случай если один недоступен
           echo "Trying to generate SBOM..."
 
-          # Сначала проверяем наличие образов
-          docker pull anchore/syft:latest 2>/dev/null || true
+          docker pull anchore/syft:1.38.0 2>/dev/null || true
 
-          docker run --rm -v $PWD:/work -w /work anchore/syft:latest \
+          docker run --rm -v $PWD:/work -w /work anchore/syft:1.38.0 \
             scan dir:. \
             --name "suggestion-box" \
             --version "${{ github.sha }}" \
             -o cyclonedx-json > EVIDENCE/P09/sbom.json || echo "SBOM generation failed"
 
-          # Проверяем что файл не пустой
           if [ -s "EVIDENCE/P09/sbom.json" ]; then
             echo "SBOM generated successfully"
             echo "Components: $(jq '.components | length' EVIDENCE/P09/sbom.json 2>/dev/null || echo 'unknown')"
           else
             echo "SBOM file is empty, creating minimal SBOM"
-            # Создаем минимальный SBOM для продолжения
             echo '{"bomFormat":"CycloneDX","specVersion":"1.6","version":1,"components":[]}' > EVIDENCE/P09/sbom.json
           fi
 
@@ -65,16 +61,15 @@ jobs:
         run: |
           echo "Running SCA scan..."
 
-          # Проверяем что SBOM файл существует и не пустой
           if [ ! -s "EVIDENCE/P09/sbom.json" ]; then
             echo "SBOM file missing or empty, skipping SCA"
             echo '{"matches":[]}' > EVIDENCE/P09/sca_report.json
             exit 0
           fi
 
-          docker pull anchore/grype:latest 2>/dev/null || true
+          docker pull anchore/grype:0.104.1 2>/dev/null || true
 
-          docker run --rm -v $PWD:/work -w /work anchore/grype:latest \
+          docker run --rm -v $PWD:/work -w /work anchore/grype:0.104.1 \
             sbom:/work/EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json || {
               echo "Grype failed, creating empty report"
               echo '{"matches":[]}' > EVIDENCE/P09/sca_report.json
@@ -92,7 +87,6 @@ jobs:
           if [ -f "EVIDENCE/P09/sca_report.json" ]; then
             echo "## Vulnerability Count by Severity" >> EVIDENCE/P09/sca_summary.md
 
-            # Пробуем считать уязвимости, если не получается - пишем что нет
             if command -v jq >/dev/null 2>&1; then
               jq '[.matches[].vulnerability.severity] | group_by(.) | map({severity: .[0], count: length}) | .[] | "- **\(.severity)**: \(.count)"' EVIDENCE/P09/sca_report.json 2>/dev/null >> EVIDENCE/P09/sca_summary.md || echo "- No vulnerabilities detected or error parsing" >> EVIDENCE/P09/sca_summary.md
             else
