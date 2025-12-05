@@ -41,9 +41,9 @@ jobs:
         run: |
           echo "Trying to generate SBOM..."
 
-          docker pull anchore/syft:1.38.0 2>/dev/null || true
+          docker pull anchore/syft:v1.38.0 2>/dev/null || true
 
-          docker run --rm -v $PWD:/work -w /work anchore/syft:1.38.0 \
+          docker run --rm -v $PWD:/work -w /work anchore/syft:v1.38.0 \
             scan dir:. \
             --name "suggestion-box" \
             --version "${{ github.sha }}" \
@@ -67,9 +67,9 @@ jobs:
             exit 0
           fi
 
-          docker pull anchore/grype:0.104.1 2>/dev/null || true
+          docker pull anchore/grype:v0.104.1 2>/dev/null || true
 
-          docker run --rm -v $PWD:/work -w /work anchore/grype:0.104.1 \
+          docker run --rm -v $PWD:/work -w /work anchore/grype:v0.104.1 \
             sbom:/work/EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json || {
               echo "Grype failed, creating empty report"
               echo '{"matches":[]}' > EVIDENCE/P09/sca_report.json
