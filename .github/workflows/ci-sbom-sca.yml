@@ -40,14 +40,14 @@ jobs:
       - name: Generate SBOM with Syft (CycloneDX)
         run: |
           echo "Trying to generate SBOM..."
-
           docker pull anchore/syft:v1.38.0 2>/dev/null || true
 
-          docker run --rm -v $PWD:/work -w /work anchore/syft:v1.38.0 \
-            scan dir:. \
-            --name "suggestion-box" \
-            --version "${{ github.sha }}" \
-            -o cyclonedx-json > EVIDENCE/P09/sbom.json || echo "SBOM generation failed"
+          docker run --rm \
+            -e SYFT_OUTPUT="cyclonedx-json" \
+            -v $PWD:/work -w /work \
+            anchore/syft:v1.38.0 \
+            /work \
+            --output /work/EVIDENCE/P09/sbom.json || echo "SBOM generation attempt finished"
 
           if [ -s "EVIDENCE/P09/sbom.json" ]; then
             echo "SBOM generated successfully"
