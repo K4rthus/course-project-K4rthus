@@ -1,0 +1,38 @@
+title = "suggestion-box gitleaks configuration"
+version = "9.6.2"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "False positives and test patterns for suggestion-box"
+paths = [
+  "EVIDENCE/.*",
+  "reports/.*",
+  "\\.pytest_cache/.*",
+  "__pycache__/.*",
+  "\\.venv/.*",
+  "venv/.*",
+  ".*\\.toml$",
+  ".*\\.lock$",
+  ".*/package-lock\\.json$",
+  ".*/yarn\\.lock$",
+  ".*\\.md$",
+  ".*\\.txt$",
+]
+
+regexes = [
+  '''test_.*''',
+  '''example_.*''',
+  '''sample_.*''',
+  '''fastapi==0\.112\.2''',
+  '''uvicorn==0\.30\.5''',
+  '''pydantic==2\.5\.0''',
+  '''requirements.*\.txt''',
+  '''pyproject\.toml''',
+  '''Dockerfile''',
+  '''[a-f0-9]{40}''',
+  '''[A-F0-9]{40}''',
+]
+
+commits = []
