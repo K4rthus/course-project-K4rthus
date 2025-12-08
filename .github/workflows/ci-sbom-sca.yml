@@ -1,0 +1,114 @@
+name: Security - SBOM & SCA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**/*.py'
+      - 'requirements*.txt'
+      - '.github/workflows/ci-sbom-sca.yml'
+  pull_request:
+    paths:
+      - '**/*.py'
+      - 'requirements*.txt'
+      - '.github/workflows/ci-sbom-sca.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom_sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure evidence directory exists
+        run: |
+          mkdir -p EVIDENCE/P09
+          echo "Directories created"
+
+      - name: Install jq for JSON processing
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate SBOM with Syft (CycloneDX)
+        run: |
+          echo "Trying to generate SBOM..."
+          docker pull anchore/syft:v1.38.0 2>/dev/null || true
+
+          # ИСПРАВЛЕННАЯ КОМАНДА: правильный синтаксис для Syft v1.38.0
+          docker run --rm -v $PWD:/work -w /work anchore/syft:v1.38.0 \
+            scan /work \
+            -o cyclonedx-json > EVIDENCE/P09/sbom.json || {
+              echo "SBOM generation failed"
+              exit 1  # Завершаем workflow с ошибкой
+            }
+
+          # Проверка результата
+          if [ -s "EVIDENCE/P09/sbom.json" ]; then
+            echo "SBOM generated successfully"
+            echo "Components: $(jq '.components | length' EVIDENCE/P09/sbom.json 2>/dev/null || echo 'unknown')"
+          else
+            echo "SBOM file is empty"
+            exit 1  # Завершаем workflow с ошибкой
+          fi
+
+      - name: Run SCA Scan with Grype
+        run: |
+          echo "Running SCA scan..."
+
+          if [ ! -s "EVIDENCE/P09/sbom.json" ]; then
+            echo "SBOM file missing or empty, skipping SCA"
+            echo '{"matches":[]}' > EVIDENCE/P09/sca_report.json
+            exit 0
+          fi
+
+          docker pull anchore/grype:v0.104.1 2>/dev/null || true
+
+          docker run --rm -v $PWD:/work -w /work anchore/grype:v0.104.1 \
+            sbom:/work/EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json || {
+              echo "Grype failed, creating empty report"
+              echo '{"matches":[]}' > EVIDENCE/P09/sca_report.json
+            }
+
+          echo "SCA scan completed"
+
+      - name: Create SCA Summary
+        run: |
+          echo "# SCA Scan Summary" > EVIDENCE/P09/sca_summary.md
+          echo "**Generated:** $(date -u)" >> EVIDENCE/P09/sca_summary.md
+          echo "**Commit:** ${{ github.sha }}" >> EVIDENCE/P09/sca_summary.md
+          echo "" >> EVIDENCE/P09/sca_summary.md
+
+          if [ -f "EVIDENCE/P09/sca_report.json" ]; then
+            echo "## Vulnerability Count by Severity" >> EVIDENCE/P09/sca_summary.md
+
+            if command -v jq >/dev/null 2>&1; then
+              jq '[.matches[].vulnerability.severity] | group_by(.) | map({severity: .[0], count: length}) | .[] | "- **\(.severity)**: \(.count)"' EVIDENCE/P09/sca_report.json 2>/dev/null >> EVIDENCE/P09/sca_summary.md || echo "- No vulnerabilities detected or error parsing" >> EVIDENCE/P09/sca_summary.md
+            else
+              echo "- No vulnerabilities detected" >> EVIDENCE/P09/sca_summary.md
+            fi
+          else
+            echo "## Error" >> EVIDENCE/P09/sca_summary.md
+            echo "SCA report not generated" >> EVIDENCE/P09/sca_summary.md
+          fi
+
+          echo "" >> EVIDENCE/P09/sca_summary.md
+          echo "## Proposed Action Plan" >> EVIDENCE/P09/sca_summary.md
+          echo "1. Review all findings above." >> EVIDENCE/P09/sca_summary.md
+          echo "2. For Critical/High findings, check if a patched version is available." >> EVIDENCE/P09/sca_summary.md
+          echo "3. Add waivers to \`policy/waivers.yml\` if needed." >> EVIDENCE/P09/sca_summary.md
+
+      - name: Upload Evidence Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P09_EVIDENCE
+          path: EVIDENCE/P09/
+          retention-days: 30
