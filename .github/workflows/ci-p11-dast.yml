@@ -37,7 +37,7 @@ jobs:
 
       - name: Run the application (FastAPI)
         run: |
-          uvicorn app.main:app --host 0.0.0.0 --port 8000 --access-log &
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           APP_PID=$!
           echo "App started with PID: $APP_PID"
           echo $APP_PID > app.pid
@@ -58,13 +58,6 @@ jobs:
             echo -n "."
           done
 
-      - name: Create minimal ZAP config
-        run: |
-          cat > zap-baseline.conf << EOF
-          rules.10054 = 90000
-          rules.10055 = 90000
-          EOF
-
       - name: Verify app is reachable
         run: |
           echo "Testing application endpoints..."
@@ -73,11 +66,24 @@ jobs:
           curl -v http://localhost:8000/suggestions
           echo ""
 
+      - name: Create correct ZAP config
+        run: |
+          echo "Creating ZAP config with correct format..."
+          # Правильный формат: три колонки, разделённые табуляцией
+          # Колонки: ruleId, newLevel, optionalParam
+          echo -e "10054\t90000\t" > zap-baseline.conf
+          echo -e "10055\t90000\t" >> zap-baseline.conf
+          echo "ZAP config created:"
+          cat zap-baseline.conf
+
       - name: Run OWASP ZAP Baseline Scan
         run: |
           echo "Starting ZAP baseline scan..."
-
-          echo -e "10054\t90000\n10055\t90000" > zap-baseline.conf
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "ZAP config contents:"
+          cat zap-baseline.conf
 
           docker run --rm \
             --network host \
@@ -91,6 +97,8 @@ jobs:
             -d -I
 
           echo "ZAP scan completed"
+          echo "Checking for generated files..."
+          ls -la zap_baseline.* 2>/dev/null || echo "No ZAP report files found"
           if [ -f zap_baseline.html ] && [ -f zap_baseline.json ]; then
             echo "Moving reports to EVIDENCE/P11/"
             mv zap_baseline.html zap_baseline.json EVIDENCE/P11/
@@ -98,8 +106,8 @@ jobs:
             ls -la EVIDENCE/P11/
           else
             echo "ERROR: ZAP reports not generated!"
-            echo "Checking what files exist..."
-            ls -la zap_baseline.* 2>/dev/null || echo "No ZAP report files"
+            echo "Listing all files in current directory:"
+            ls -la
             exit 1
           fi
 
