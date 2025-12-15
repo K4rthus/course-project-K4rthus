@@ -1,0 +1,69 @@
+rules:
+  - id: python-hardcoded-secret-in-config
+    languages: [python]
+    message: "Potential hardcoded secret in configuration"
+    severity: ERROR
+    patterns:
+      - pattern: |
+          $KEY = $VALUE
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (SECRET|PASSWORD|KEY|TOKEN)
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^['\"].+['\"]$
+    fix: |
+      $KEY = os.getenv("${KEY.upper()}")
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      technology: [python, fastapi]
+
+  - id: python-unsafe-template-rendering
+    languages: [python]
+    message: "Potential XSS in template rendering - user input used directly"
+    severity: WARNING
+    patterns:
+      - pattern: |
+          $RESPONSE($TEXT)
+      - pattern-not: sanitize_text(...)
+      - metavariable-regex:
+          metavariable: $RESPONSE
+          regex: (HTMLResponse|PlainTextResponse|Response)
+    metadata:
+      category: security
+      cwe: "CWE-79: Cross-site Scripting"
+      technology: [python, fastapi]
+
+  - id: python-insecure-deserialization
+    languages: [python]
+    message: "Potential insecure deserialization with pickle or similar"
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: marshal.loads(...)
+          - pattern: marshal.load(...)
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      technology: [python]
+
+  - id: python-file-path-traversal
+    languages: [python]
+    message: "Potential path traversal vulnerability"
+    severity: WARNING
+    patterns:
+      - pattern: |
+          open($PATH, ...)
+      - pattern-not-inside: |
+          if ".." not in $PATH and "/" not in $PATH:
+            ...
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: .*\.\.|/.*
+    metadata:
+      category: security
+      cwe: "CWE-22: Improper Limitation of a Pathname"
+      technology: [python]
