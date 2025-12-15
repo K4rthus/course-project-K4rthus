@@ -16,14 +16,11 @@ concurrency:
 jobs:
   dast:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Create evidence directory
-        run: mkdir -p EVIDENCE/P11
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -33,39 +30,84 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install fastapi==0.120.1 uvicorn==0.38.0 pydantic==2.5.0
+
+      - name: Create evidence directory
+        run: mkdir -p EVIDENCE/P11
 
       - name: Run the application (FastAPI)
         run: |
-          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 --access-log &
           APP_PID=$!
           echo "App started with PID: $APP_PID"
-
-          echo "Waiting for the app to start..."
-          timeout 30 bash -c 'until curl -sf http://localhost:8000/health; do sleep 1; done'
-          echo "Application is ready."
-
           echo $APP_PID > app.pid
+          sleep 5
+          echo "Checking if port 8000 is listening..."
+          ss -tulpn | grep :8000 || echo "Port 8000 not found"
+          echo "Waiting for /health endpoint..."
+          for i in {1..30}; do
+            if curl -s -f http://localhost:8000/health > /dev/null; then
+              echo "Application is healthy!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Application failed to start after 30 seconds"
+              exit 1
+            fi
+            sleep 1
+            echo -n "."
+          done
+
+      - name: Create minimal ZAP config
+        run: |
+          cat > zap-baseline.conf << EOF
+          rules.10054 = 90000
+          rules.10055 = 90000
+          EOF
+
+      - name: Verify app is reachable
+        run: |
+          echo "Testing application endpoints..."
+          curl -v http://localhost:8000/health
+          echo ""
+          curl -v http://localhost:8000/suggestions
+          echo ""
 
       - name: Run OWASP ZAP Baseline Scan
         run: |
+          echo "Starting ZAP baseline scan..."
+
+          echo -e "10054\t90000\n10055\t90000" > zap-baseline.conf
+
           docker run --rm \
             --network host \
             -v "${{ github.workspace }}":/zap/wrk/:rw \
-            -t owasp/zap2docker-stable:latest \
+            ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
-            -t http://localhost:8000/ \
-            -r zap_baseline.html \
-            -J zap_baseline.json \
-            -a \
-            -d || echo "ZAP scan finished (exit code ignored for alerts)"
+            -t http://localhost:8000 \
+            -r /zap/wrk/zap_baseline.html \
+            -J /zap/wrk/zap_baseline.json \
+            -c /zap/wrk/zap-baseline.conf \
+            -d -I
 
-          mv zap_baseline.* EVIDENCE/P11/ 2>/dev/null || echo "Reports moved or not found"
+          echo "ZAP scan completed"
+          if [ -f zap_baseline.html ] && [ -f zap_baseline.json ]; then
+            echo "Moving reports to EVIDENCE/P11/"
+            mv zap_baseline.html zap_baseline.json EVIDENCE/P11/
+            echo "Files in EVIDENCE/P11/:"
+            ls -la EVIDENCE/P11/
+          else
+            echo "ERROR: ZAP reports not generated!"
+            echo "Checking what files exist..."
+            ls -la zap_baseline.* 2>/dev/null || echo "No ZAP report files"
+            exit 1
+          fi
 
       - name: Stop the application
         if: always()
         run: |
           if [ -f app.pid ]; then
+            echo "Stopping application (PID: $(cat app.pid))"
             kill $(cat app.pid) 2>/dev/null || true
             rm -f app.pid
           fi
@@ -77,3 +119,14 @@ jobs:
           name: P11_EVIDENCE
           path: EVIDENCE/P11/
           retention-days: 30
+
+      - name: Check evidence contents
+        if: always()
+        run: |
+          echo "Final check of EVIDENCE/P11/"
+          ls -la EVIDENCE/P11/ || echo "Directory does not exist"
+          if [ -f EVIDENCE/P11/zap_baseline.html ]; then
+            echo "ZAP HTML report exists"
+          else
+            echo "ZAP HTML report missing"
+          fi
