@@ -1,0 +1,79 @@
+name: P11 - DAST Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "p11-dast-zap" ]
+    paths:
+      - 'app/**'
+      - 'requirements.txt'
+      - '.github/workflows/ci-p11-dast.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create evidence directory
+        run: mkdir -p EVIDENCE/P11
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run the application (FastAPI)
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          APP_PID=$!
+          echo "App started with PID: $APP_PID"
+
+          echo "Waiting for the app to start..."
+          timeout 30 bash -c 'until curl -sf http://localhost:8000/health; do sleep 1; done'
+          echo "Application is ready."
+
+          echo $APP_PID > app.pid
+
+      - name: Run OWASP ZAP Baseline Scan
+        run: |
+          docker run --rm \
+            --network host \
+            -v "${{ github.workspace }}":/zap/wrk/:rw \
+            -t owasp/zap2docker-stable:latest \
+            zap-baseline.py \
+            -t http://localhost:8000/ \
+            -r zap_baseline.html \
+            -J zap_baseline.json \
+            -a \
+            -d || echo "ZAP scan finished (exit code ignored for alerts)"
+
+          mv zap_baseline.* EVIDENCE/P11/ 2>/dev/null || echo "Reports moved or not found"
+
+      - name: Stop the application
+        if: always()
+        run: |
+          if [ -f app.pid ]; then
+            kill $(cat app.pid) 2>/dev/null || true
+            rm -f app.pid
+          fi
+
+      - name: Upload DAST evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P11_EVIDENCE
+          path: EVIDENCE/P11/
+          retention-days: 30
