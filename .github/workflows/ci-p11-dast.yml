@@ -56,9 +56,12 @@ jobs:
       - name: Run OWASP ZAP Baseline Scan
         run: |
           echo "Starting ZAP scan..."
+          mkdir -p /tmp/zap_reports
+
           docker run --rm \
             --network host \
-            -v "${{ github.workspace }}":/zap/wrk/:rw \
+            -v "/tmp/zap_reports:/zap/wrk/:rw" \
+            -v "${{ github.workspace }}":/zap/wrk/original:ro \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
             -t http://localhost:8000 \
@@ -66,11 +69,12 @@ jobs:
             -J /zap/wrk/zap_baseline.json \
             -d -I
 
-          if [ -f zap_baseline.html ] && [ -f zap_baseline.json ]; then
-            mv zap_baseline.html zap_baseline.json EVIDENCE/P11/
-            echo "ZAP reports saved"
+          if [ -f /tmp/zap_reports/zap_baseline.html ]; then
+            cp /tmp/zap_reports/zap_baseline.html /tmp/zap_reports/zap_baseline.json EVIDENCE/P11/
+            echo "ZAP reports copied successfully"
           else
-            echo "ZAP didn't generate reports"
+            echo "ZAP reports not found in /tmp/zap_reports/"
+            ls -la /tmp/zap_reports/
           fi
 
       - name: Stop the application
